@@ -6,6 +6,7 @@ import "time"
 import "strconv"
 import "math"
 import "sort"
+import "os"
 
 type InstructionType int
 
@@ -245,10 +246,28 @@ func evolve(program []Instruction) []Instruction{
 }
 
 func main() {
+	args := os.Args
 	numPrograms := 100
+	if len(args) >= 2 {
+		numPrograms,_ = strconv.Atoi(args[1])
+	}
+	numIterations := 1000
+	if len(args) >= 3 {
+		numIterations,_ = strconv.Atoi(args[2])
+	}
+	learningRate := 0.5
+	if len(args) >= 4 {
+		learningRate,_ = strconv.ParseFloat(args[3], 64)
+	}
+	randomize := true
+	if len(args) >= 5 {
+		randomize = args[4] != "false"
+	}
 	programLength := 100
+
 	rand.Seed(time.Now().UnixNano())
 	programs := [][]Instruction{}
+
 	for i := 0; i < numPrograms; i++ {
 		programs = append(programs, randomProgram(programLength))
 	}
@@ -258,15 +277,21 @@ func main() {
 	for i := 0; i < 1000; i++ {
 		originalArray[i] = rand.Intn(10000)
 	}
+	results := []Result{}
 	for _, prog := range programs {
 		score, _ := testProgram(prog, originalArray)
-		fmt.Println(score)
+		results = append(results, Result{prog, score})
 	}
-	numIterations := 100
-	learningRate := 0.1
+	sort.Slice(results, func (i, j int) bool {
+		return results[i].Score > results[j].Score
+	})
+	fmt.Println("Best before:", results[0].Score)
+
 	for i := 0; i < numIterations; i++ {
-		for i := 0; i < 1000; i++ {
-			originalArray[i] = rand.Intn(10000)
+		if randomize {
+			for i := 0; i < 1000; i++ {
+				originalArray[i] = rand.Intn(10000)
+			}
 		}
 		results := []Result{}
 		for _, prog := range programs {
@@ -287,11 +312,13 @@ func main() {
 		programs = newPrograms
 	}
 
-	for i := 0; i < 1000; i++ {
-		originalArray[i] = rand.Intn(10000)
+	if randomize {
+		for i := 0; i < 1000; i++ {
+			originalArray[i] = rand.Intn(10000)
+		}
 	}
 	score, mem := testProgram(programs[0], originalArray)
-	fmt.Println(score)
-	fmt.Println(mem)
-	fmt.Println(programs[0])
+	fmt.Println("Best: ", score)
+	fmt.Println("Mem:",mem)
+	fmt.Println("Program:",programs[0])
 }
