@@ -1,6 +1,7 @@
 TODO
 =======
-[ ] Implement all instructions
-[ ] Randomly generate programs
-[ ] Run programs on random permuation of data
-[ ] Rank programs by how well sorted the data is
+[x] Implement all instructions
+[x] Randomly generate programs
+[x] Run programs on random permuation of data
+[x] Rank programs by how well sorted the data is
+[ ] Save programs after every run

@@ -1,12 +1,16 @@
 package main
 
-import "fmt"
-import "math/rand"
-import "time"
-import "strconv"
-import "math"
-import "sort"
-import "os"
+import (
+	"io/ioutil"
+	"encoding/json"
+	"fmt"
+	"math/rand"
+	"time"
+	"strconv"
+	"math"
+	"sort"
+	"os"
+)
 
 type InstructionType int
 
@@ -178,6 +182,18 @@ func testProgram(program []Instruction, originalArray []int) (float64, []int) {
 	return score, mem
 }
 
+func testPrograms(programs [][]Instruction, originalArray []int) []Result {
+	results := []Result{}
+	for _, prog := range programs {
+		score, _ := testProgram(prog, originalArray)
+		results = append(results, Result{prog, score})
+	}
+	sort.Slice(results, func (i, j int) bool {
+		return results[i].Score > results[j].Score
+	})
+	return results
+}
+
 func randomRegister() Argument {
 	switch (rand.Intn(3)) {
 	case 0:
@@ -238,87 +254,124 @@ func evolve(program []Instruction) []Instruction{
 	newProgram := make([]Instruction, len(program))
 	copy(newProgram, program)
 	if rand.Intn(100) < 100 {
-		for i := 0; i < rand.Intn(3); i++ {
+		for i := 0; i < rand.Intn(10); i++ {
 			program[rand.Intn(len(program))] = randomIns()
 		}
 	}
 	return newProgram
 }
 
-func main() {
-	args := os.Args
-	numPrograms := 100
-	if len(args) >= 2 {
-		numPrograms,_ = strconv.Atoi(args[1])
+func randomize(array []int, numberRange int) {
+	for i := 0; i < len(array); i++ {
+		array[i] = rand.Intn(numberRange)
 	}
-	numIterations := 1000
-	if len(args) >= 3 {
-		numIterations,_ = strconv.Atoi(args[2])
-	}
-	learningRate := 0.5
-	if len(args) >= 4 {
-		learningRate,_ = strconv.ParseFloat(args[3], 64)
-	}
-	randomize := true
-	if len(args) >= 5 {
-		randomize = args[4] != "false"
-	}
-	programLength := 100
+}
 
-	rand.Seed(time.Now().UnixNano())
+func loadPrograms(filename string) [][]Instruction {
+	input, err := ioutil.ReadFile(filename)
+	if err != nil {
+		fmt.Printf("%s\n",err)
+		return nil
+	}
 	programs := [][]Instruction{}
-
-	for i := 0; i < numPrograms; i++ {
-		programs = append(programs, randomProgram(programLength))
+	err = json.Unmarshal(input, &programs)
+	if err != nil {
+		fmt.Printf("%s\n",err)
+		return nil
 	}
-	programs[0] = nullProgram(programLength)
+	return programs
+}
 
-	originalArray := make([]int, 1000)
-	for i := 0; i < 1000; i++ {
-		originalArray[i] = rand.Intn(10000)
+func writePrograms(filename string, programs [][]Instruction) {
+	output, err := json.Marshal(programs)
+	if err == nil {
+		ioutil.WriteFile(filename, output, 0644)
 	}
-	results := []Result{}
-	for _, prog := range programs {
-		score, _ := testProgram(prog, originalArray)
-		results = append(results, Result{prog, score})
-	}
-	sort.Slice(results, func (i, j int) bool {
-		return results[i].Score > results[j].Score
-	})
-	fmt.Println("Best before:", results[0].Score)
+}
 
-	for i := 0; i < numIterations; i++ {
-		if randomize {
-			for i := 0; i < 1000; i++ {
-				originalArray[i] = rand.Intn(10000)
+func main() {
+	rand.Seed(time.Now().UnixNano())
+	learningRate := 0.1
+	shouldRandomize := true
+	memSize := 1000
+	args := os.Args
+	if args[1] == "generate" {
+		programLength := 100
+	
+		programs := [][]Instruction{}
+		numPrograms, _ := strconv.Atoi(args[3])
+		for i := 0; i < numPrograms; i++ {
+			programs = append(programs, randomProgram(programLength))
+		}
+		programs[0] = nullProgram(programLength)
+		writePrograms(args[2], programs)
+	} else if args[1] == "test" {
+		programs := loadPrograms(args[2])
+		array := make([]int, memSize)
+		sum := 0.0
+		count := 0
+		for i := 0; i < 100; i++ {
+			randomize(array, memSize*10)
+			results := testPrograms(programs, array)
+			for _, result := range results {
+				sum += result.Score
+				count += 1
 			}
 		}
-		results := []Result{}
-		for _, prog := range programs {
-			score, _ := testProgram(prog, originalArray)
-			results = append(results, Result{prog, score})
+		println("Average score:",sum/float64(count))
+	} else {
+		programs := loadPrograms(args[1])
+		numIterations := 1000
+		if len(args) >= 3 {
+			numIterations,_ = strconv.Atoi(args[2])
 		}
-		sort.Slice(results, func (i, j int) bool {
-			return results[i].Score > results[j].Score
-		})
-		programsToKeep := int(float64(len(results))*(1.0-learningRate))
-		newPrograms := make([][]Instruction, len(programs))
-		for i := 0; i < programsToKeep; i++ {
-			newPrograms[i] = results[i].Program
+
+		originalArray := make([]int, memSize)
+		randomize(originalArray, memSize*10)
+		results := testPrograms(programs, originalArray)
+		best := 1.0
+		average := 0.0
+		for _, result := range results {
+			average += result.Score
+			if best > 0.0 || result.Score > best {
+				best = result.Score
+			}
 		}
-		for i := programsToKeep; i < len(programs); i++ {
-			newPrograms[i] = evolve(newPrograms[rand.Intn(programsToKeep)])
+		fmt.Println("Average before:", average/float64(len(results)),"Best before:",best)
+
+		array := make([]int, memSize)
+		randomize(array, memSize*10)
+		for i := 0; i < numIterations; i++ {
+			if shouldRandomize {
+				randomize(array, memSize*10)
+			}
+			results := testPrograms(programs, array)
+			programsToKeep := int(float64(len(results))*(1.0-learningRate))
+			newPrograms := make([][]Instruction, len(programs))
+			for i := 0; i < programsToKeep; i++ {
+				newPrograms[i] = results[i].Program
+			}
+			for i := programsToKeep; i < len(programs); i++ {
+				newPrograms[i] = evolve(newPrograms[rand.Intn(programsToKeep)])
+			}
+			programs = newPrograms
 		}
-		programs = newPrograms
+
+		results = testPrograms(programs, originalArray)
+		best = 1.0
+		average = 0.0
+		for _, result := range results {
+			average += result.Score
+			if best > 0.0 || result.Score > best {
+				best = result.Score
+			}
+		}
+		fmt.Println("Average before:", average/float64(len(results)),"Best before:",best)
+		output,_ := json.Marshal(programs)
+		ioutil.WriteFile(args[1], output, 0644)
+		//fmt.Println("Mem:",mem)
+		//fmt.Println("Program:",programs[0])
 	}
 
-	if randomize {
-		for i := 0; i < 1000; i++ {
-			originalArray[i] = rand.Intn(10000)
-		}
-	}
-	score, mem := testProgram(programs[0], originalArray)
-	fmt.Println("Best: ", score)
-	fmt.Println("Mem:",mem)
-	fmt.Println("Program:",programs[0])
+	
 }
