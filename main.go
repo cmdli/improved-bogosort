@@ -4,13 +4,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"math"
 	"math/rand"
 	"os"
 	"sort"
 	"strconv"
 	"time"
 )
+
+const LEARNING_RATE = 0.1
+const MUTATION_RATE = 0.1
+const PROGRAM_LENGTH = 100
+const ARRAY_SIZE = 1000
+const VALUE_SIZE = 10000
 
 type InstructionType int
 
@@ -216,13 +221,13 @@ func testProgram(program []Instruction, originalArray []int) (float64, []int) {
 			testCounts[mem[i]] = 1
 		}
 	}
-	for num, count := range numCounts {
+	/*for num, count := range numCounts {
 		testCount, ok := testCounts[num]
 		if !ok {
 			testCount = 0
 		}
 		score -= math.Abs(float64(count - testCount))
-	}
+	}*/
 	return score, mem
 }
 
@@ -259,11 +264,11 @@ func randomIns() Instruction {
 	Type := InstructionType(rand.Intn(7))
 	switch Type {
 	case SET:
-		return Instruction{Type: SET, Arg1: randomRegister(), Arg2: Argument(rand.Intn(1000))}
+		return Instruction{Type: SET, Arg1: randomRegister(), Arg2: Argument(rand.Intn(VALUE_SIZE))}
 	case READ:
-		return Instruction{Type: READ, Arg1: randomRegister(), Arg2: Argument(rand.Intn(1000))}
+		return Instruction{Type: READ, Arg1: randomRegister(), Arg2: Argument(rand.Intn(ARRAY_SIZE))}
 	case WRITE:
-		return Instruction{Type: WRITE, Arg1: randomRegister(), Arg2: Argument(rand.Intn(1000))}
+		return Instruction{Type: WRITE, Arg1: randomRegister(), Arg2: Argument(rand.Intn(ARRAY_SIZE))}
 	case COMPARE:
 		return Instruction{Type: COMPARE, Arg1: randomRegister(), Arg2: randomRegister()}
 	case JUMPLESSTHAN:
@@ -297,7 +302,7 @@ func nullProgram(length int) []Instruction {
 func evolve(program []Instruction) []Instruction {
 	newProgram := make([]Instruction, len(program))
 	copy(newProgram, program)
-	for i := 0; i < int(float64(len(program))*0.1); i++ {
+	for i := 0; i < int(float64(len(program))*MUTATION_RATE); i++ {
 		program[rand.Intn(len(program))] = randomIns()
 	}
 	return newProgram
@@ -351,31 +356,28 @@ func average(results []Result) float64 {
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
-	learningRate := 0.1
 	shouldRandomize := true
-	memSize := 1000
 	args := os.Args
 	if args[1] == "generate" {
-		programLength := 100
 
 		programs := [][]Instruction{}
 		numPrograms, _ := strconv.Atoi(args[3])
 		for i := 0; i < numPrograms; i++ {
-			programs = append(programs, randomProgram(programLength))
+			programs = append(programs, randomProgram(PROGRAM_LENGTH))
 		}
-		programs[0] = nullProgram(programLength)
+		programs[0] = nullProgram(PROGRAM_LENGTH)
 		writePrograms(args[2], programs)
 	} else if args[1] == "test" {
 		programs := loadPrograms(args[2])
-		array := make([]int, memSize)
+		array := make([]int, ARRAY_SIZE)
 		sum := 0.0
 		count := 0
 		for i := 0; i < 100; i++ {
-			randomize(array, memSize*10)
+			randomize(array, VALUE_SIZE)
 			results := testPrograms(programs, array)
 			for _, result := range results {
 				sum += result.Score
-				count += 1
+				count++
 			}
 		}
 		println("Average score:", sum/float64(count))
@@ -386,19 +388,19 @@ func main() {
 			numIterations, _ = strconv.Atoi(args[3])
 		}
 
-		originalArray := make([]int, memSize)
-		randomize(originalArray, memSize*10)
+		originalArray := make([]int, ARRAY_SIZE)
+		randomize(originalArray, VALUE_SIZE)
 		results := testPrograms(programs, originalArray)
 		fmt.Println("Average before:", average(results), "Best before:", best(results))
 
-		array := make([]int, memSize)
-		randomize(array, memSize*10)
+		array := make([]int, ARRAY_SIZE)
+		randomize(array, VALUE_SIZE)
 		for i := 0; i < numIterations; i++ {
 			if shouldRandomize {
-				randomize(array, memSize*10)
+				randomize(array, VALUE_SIZE)
 			}
 			results := testPrograms(programs, array)
-			programsToKeep := int(float64(len(results)) * (1.0 - learningRate))
+			programsToKeep := int(float64(len(results)) * (1.0 - LEARNING_RATE))
 			newPrograms := make([][]Instruction, len(programs))
 			for i := 0; i < programsToKeep; i++ {
 				newPrograms[i] = results[i].Program
@@ -408,6 +410,8 @@ func main() {
 			}
 			newPrograms[len(programs)-1] = randomProgram(len(programs[0]))
 			programs = newPrograms
+			output, _ := json.Marshal(programs)
+			ioutil.WriteFile(args[1], output, 0644)
 		}
 
 		results = testPrograms(programs, originalArray)
