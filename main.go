@@ -7,7 +7,6 @@ import (
 	"math/rand"
 	"time"
 	"strconv"
-	"math"
 	"sort"
 	"os"
 )
@@ -149,6 +148,7 @@ func (b ByScore) Less(i, j int) bool { return b[i].Score < b[j].Score }
 func testProgram(program []Instruction, originalArray []int) (float64, []int) {
 	mem := make([]int, 10000)
 	numCounts := make(map[int]int)
+	scoreBefore := 0.0
 	for i,num := range originalArray {
 		mem[i] = num
 		count, ok := numCounts[num]
@@ -157,11 +157,14 @@ func testProgram(program []Instruction, originalArray []int) (float64, []int) {
 		} else {
 			numCounts[num] = 1
 		}
+		if i < len(originalArray)-1 && originalArray[i+1] < originalArray[i] {
+			scoreBefore -= 1.0
+		}
 	}
 	run(program, mem, 10000)
 	score := 0.0
 	testCounts := make(map[int]int)
-	for i := 0; i < len(originalArray); i++ {
+	for i := 0; i < len(originalArray)-1; i++ {
 		if mem[i+1] < mem[i] {
 			score -= 1.0
 		}
@@ -172,13 +175,16 @@ func testProgram(program []Instruction, originalArray []int) (float64, []int) {
 			testCounts[mem[i]] = 1
 		}
 	}
-	for num,count := range numCounts {
+	if scoreBefore < score {
+		//fmt.Println("Score improved by ",score-scoreBefore)
+	}
+	/*for num,count := range numCounts {
 		testCount, ok := testCounts[num]
 		if !ok {
 			testCount = 0
 		}
 		score -= math.Abs(float64(count-testCount))
-	}
+	}*/
 	return score, mem
 }
 
@@ -253,10 +259,8 @@ func nullProgram(length int) []Instruction {
 func evolve(program []Instruction) []Instruction{
 	newProgram := make([]Instruction, len(program))
 	copy(newProgram, program)
-	if rand.Intn(100) < 100 {
-		for i := 0; i < rand.Intn(10); i++ {
-			program[rand.Intn(len(program))] = randomIns()
-		}
+	for i := 0; i < int(float64(len(program))*0.1); i++ {
+		program[rand.Intn(len(program))] = randomIns()
 	}
 	return newProgram
 }
@@ -287,6 +291,24 @@ func writePrograms(filename string, programs [][]Instruction) {
 	if err == nil {
 		ioutil.WriteFile(filename, output, 0644)
 	}
+}
+
+func best(results []Result) float64 {
+	best := 1.0
+	for _, result := range results {
+		if best > 0.0 || result.Score > best {
+			best = result.Score
+		}
+	}
+	return best
+}
+
+func average(results []Result) float64 {
+	average := 0.0
+	for _, result := range results {
+		average += result.Score
+	}
+	return average / float64(len(results))
 }
 
 func main() {
@@ -329,15 +351,7 @@ func main() {
 		originalArray := make([]int, memSize)
 		randomize(originalArray, memSize*10)
 		results := testPrograms(programs, originalArray)
-		best := 1.0
-		average := 0.0
-		for _, result := range results {
-			average += result.Score
-			if best > 0.0 || result.Score > best {
-				best = result.Score
-			}
-		}
-		fmt.Println("Average before:", average/float64(len(results)),"Best before:",best)
+		fmt.Println("Average before:", average(results),"Best before:",best(results))
 
 		array := make([]int, memSize)
 		randomize(array, memSize*10)
@@ -351,26 +365,17 @@ func main() {
 			for i := 0; i < programsToKeep; i++ {
 				newPrograms[i] = results[i].Program
 			}
-			for i := programsToKeep; i < len(programs); i++ {
+			for i := programsToKeep; i < len(programs)-1; i++ {
 				newPrograms[i] = evolve(newPrograms[rand.Intn(programsToKeep)])
 			}
+			newPrograms[len(programs)-1] = randomProgram(len(programs[0]))
 			programs = newPrograms
 		}
 
 		results = testPrograms(programs, originalArray)
-		best = 1.0
-		average = 0.0
-		for _, result := range results {
-			average += result.Score
-			if best > 0.0 || result.Score > best {
-				best = result.Score
-			}
-		}
-		fmt.Println("Average before:", average/float64(len(results)),"Best before:",best)
+		fmt.Println("Average:", average(results),"Best:",best(results))
 		output,_ := json.Marshal(programs)
 		ioutil.WriteFile(args[1], output, 0644)
-		//fmt.Println("Mem:",mem)
-		//fmt.Println("Program:",programs[0])
 	}
 
 	
