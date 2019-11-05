@@ -1,26 +1,27 @@
 package main
 
 import (
-	"io/ioutil"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"math"
 	"math/rand"
-	"time"
-	"strconv"
-	"sort"
 	"os"
+	"sort"
+	"strconv"
+	"time"
 )
 
 type InstructionType int
 
 const (
-	SET InstructionType = 0
-	READ = 1
-	WRITE = 2
-	COMPARE = 3
-	JUMPLESSTHAN = 4
-	JUMPEQUAL = 5
-	LABEL = 6
+	SET          InstructionType = 0
+	READ                         = 1
+	WRITE                        = 2
+	COMPARE                      = 3
+	JUMPLESSTHAN                 = 4
+	JUMPEQUAL                    = 5
+	LABEL                        = 6
 )
 
 type Argument int32
@@ -32,9 +33,9 @@ const (
 )
 
 type Instruction struct {
-	Type InstructionType
-	Arg1 Argument
-	Arg2 Argument
+	Type      InstructionType
+	Arg1      Argument
+	Arg2      Argument
 	StringArg string
 }
 
@@ -59,7 +60,7 @@ func decodeArgument(a Argument, r0 int, r1 int, r2 int, mem []int) int {
 	} else if a >= 0 && mem != nil {
 		return mem[a]
 	} else {
-		assert(false, "Invalid argument: " + string(a))
+		assert(false, "Invalid argument: "+string(a))
 		return 0
 	}
 }
@@ -79,7 +80,7 @@ func run(program []Instruction, mem []int, limit int) {
 	lessThan, equal := false, false
 	iterations := 0
 	for {
-		if pc >= len(program) || pc < 0 || iterations > limit{
+		if pc >= len(program) || pc < 0 || iterations > limit {
 			break
 		}
 		iterations++
@@ -137,28 +138,25 @@ func run(program []Instruction, mem []int, limit int) {
 
 type Result struct {
 	Program []Instruction
-	Score float64
+	Score   float64
 }
 
 type ByScore []Result
-func (b ByScore) Len() int { return len(b) }
-func (b ByScore) Swap(i int, j int) { b[i], b[j] = b[j], b[i] }
+
+func (b ByScore) Len() int           { return len(b) }
+func (b ByScore) Swap(i int, j int)  { b[i], b[j] = b[j], b[i] }
 func (b ByScore) Less(i, j int) bool { return b[i].Score < b[j].Score }
 
 func testProgram(program []Instruction, originalArray []int) (float64, []int) {
 	mem := make([]int, 10000)
 	numCounts := make(map[int]int)
-	scoreBefore := 0.0
-	for i,num := range originalArray {
+	for i, num := range originalArray {
 		mem[i] = num
 		count, ok := numCounts[num]
 		if ok {
-			numCounts[num]= count + 1
+			numCounts[num] = count + 1
 		} else {
 			numCounts[num] = 1
-		}
-		if i < len(originalArray)-1 && originalArray[i+1] < originalArray[i] {
-			scoreBefore -= 1.0
 		}
 	}
 	run(program, mem, 10000)
@@ -170,21 +168,18 @@ func testProgram(program []Instruction, originalArray []int) (float64, []int) {
 		}
 		count, ok := testCounts[mem[i]]
 		if ok {
-			testCounts[mem[i]]= count + 1
+			testCounts[mem[i]] = count + 1
 		} else {
 			testCounts[mem[i]] = 1
 		}
 	}
-	if scoreBefore < score {
-		//fmt.Println("Score improved by ",score-scoreBefore)
-	}
-	/*for num,count := range numCounts {
+	for num, count := range numCounts {
 		testCount, ok := testCounts[num]
 		if !ok {
 			testCount = 0
 		}
-		score -= math.Abs(float64(count-testCount))
-	}*/
+		score -= math.Abs(float64(count - testCount))
+	}
 	return score, mem
 }
 
@@ -194,14 +189,14 @@ func testPrograms(programs [][]Instruction, originalArray []int) []Result {
 		score, _ := testProgram(prog, originalArray)
 		results = append(results, Result{prog, score})
 	}
-	sort.Slice(results, func (i, j int) bool {
+	sort.Slice(results, func(i, j int) bool {
 		return results[i].Score > results[j].Score
 	})
 	return results
 }
 
 func randomRegister() Argument {
-	switch (rand.Intn(3)) {
+	switch rand.Intn(3) {
 	case 0:
 		return R0
 	case 1:
@@ -219,7 +214,7 @@ func randomLabel() string {
 
 func randomIns() Instruction {
 	Type := InstructionType(rand.Intn(7))
-	switch (Type) {
+	switch Type {
 	case SET:
 		return Instruction{Type: SET, Arg1: randomRegister(), Arg2: Argument(rand.Intn(1000))}
 	case READ:
@@ -235,7 +230,7 @@ func randomIns() Instruction {
 	case LABEL:
 		return Instruction{Type: LABEL, StringArg: randomLabel()}
 	default:
-		assert(false, "Incorrect instruction type: " + string(Type))
+		assert(false, "Incorrect instruction type: "+string(Type))
 	}
 	return Instruction{Type: LABEL, StringArg: "NoOp"}
 }
@@ -251,12 +246,12 @@ func randomProgram(length int) []Instruction {
 func nullProgram(length int) []Instruction {
 	program := []Instruction{}
 	for i := 0; i < length; i++ {
-		program = append(program, Instruction{Type:LABEL, StringArg:"NO-OP"})
+		program = append(program, Instruction{Type: LABEL, StringArg: "NO-OP"})
 	}
 	return program
 }
 
-func evolve(program []Instruction) []Instruction{
+func evolve(program []Instruction) []Instruction {
 	newProgram := make([]Instruction, len(program))
 	copy(newProgram, program)
 	for i := 0; i < int(float64(len(program))*0.1); i++ {
@@ -274,13 +269,13 @@ func randomize(array []int, numberRange int) {
 func loadPrograms(filename string) [][]Instruction {
 	input, err := ioutil.ReadFile(filename)
 	if err != nil {
-		fmt.Printf("%s\n",err)
+		fmt.Printf("%s\n", err)
 		return nil
 	}
 	programs := [][]Instruction{}
 	err = json.Unmarshal(input, &programs)
 	if err != nil {
-		fmt.Printf("%s\n",err)
+		fmt.Printf("%s\n", err)
 		return nil
 	}
 	return programs
@@ -319,7 +314,7 @@ func main() {
 	args := os.Args
 	if args[1] == "generate" {
 		programLength := 100
-	
+
 		programs := [][]Instruction{}
 		numPrograms, _ := strconv.Atoi(args[3])
 		for i := 0; i < numPrograms; i++ {
@@ -340,18 +335,18 @@ func main() {
 				count += 1
 			}
 		}
-		println("Average score:",sum/float64(count))
+		println("Average score:", sum/float64(count))
 	} else {
 		programs := loadPrograms(args[1])
 		numIterations := 1000
 		if len(args) >= 3 {
-			numIterations,_ = strconv.Atoi(args[2])
+			numIterations, _ = strconv.Atoi(args[2])
 		}
 
 		originalArray := make([]int, memSize)
 		randomize(originalArray, memSize*10)
 		results := testPrograms(programs, originalArray)
-		fmt.Println("Average before:", average(results),"Best before:",best(results))
+		fmt.Println("Average before:", average(results), "Best before:", best(results))
 
 		array := make([]int, memSize)
 		randomize(array, memSize*10)
@@ -360,7 +355,7 @@ func main() {
 				randomize(array, memSize*10)
 			}
 			results := testPrograms(programs, array)
-			programsToKeep := int(float64(len(results))*(1.0-learningRate))
+			programsToKeep := int(float64(len(results)) * (1.0 - learningRate))
 			newPrograms := make([][]Instruction, len(programs))
 			for i := 0; i < programsToKeep; i++ {
 				newPrograms[i] = results[i].Program
@@ -373,10 +368,9 @@ func main() {
 		}
 
 		results = testPrograms(programs, originalArray)
-		fmt.Println("Average:", average(results),"Best:",best(results))
-		output,_ := json.Marshal(programs)
+		fmt.Println("Average:", average(results), "Best:", best(results))
+		output, _ := json.Marshal(programs)
 		ioutil.WriteFile(args[1], output, 0644)
 	}
 
-	
 }
