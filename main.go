@@ -32,6 +32,17 @@ const (
 	R2 Argument = -1
 )
 
+func (arg Argument) Pretty() string {
+	if arg == R0 {
+		return "R0"
+	} else if arg == R1 {
+		return "R1"
+	} else if arg == R2 {
+		return "R2"
+	}
+	return strconv.Itoa(int(arg))
+}
+
 type Instruction struct {
 	Type      InstructionType
 	Arg1      Argument
@@ -41,6 +52,38 @@ type Instruction struct {
 
 func (ins Instruction) String() string {
 	return fmt.Sprintf("%#v", ins)
+}
+
+func (ins Instruction) Pretty() string {
+	switch ins.Type {
+	case SET:
+		return "SET " + ins.Arg1.Pretty() + " " + ins.Arg2.Pretty()
+	case READ:
+		return "READ " + ins.Arg1.Pretty() + " " + ins.Arg2.Pretty()
+	case WRITE:
+		return "WRITE " + ins.Arg1.Pretty() + " " + ins.Arg2.Pretty()
+	case COMPARE:
+		return "COMPARE " + ins.Arg1.Pretty() + " " + ins.Arg2.Pretty()
+	case JUMPLESSTHAN:
+		return "JLT " + ins.StringArg
+	case JUMPEQUAL:
+		return "JE " + ins.StringArg
+	case LABEL:
+		return "LABEL " + ins.StringArg + ":"
+	default:
+		assert(false, "Incorrect instruction type: "+string(ins.Type))
+	}
+	return "INVALID"
+}
+
+type Program []Instruction
+
+func (program Program) Pretty() string {
+	out := ""
+	for _, ins := range program {
+		out += ins.Pretty() + "\n"
+	}
+	return out
 }
 
 func assert(b bool, err string) {
@@ -336,11 +379,11 @@ func main() {
 			}
 		}
 		println("Average score:", sum/float64(count))
-	} else {
-		programs := loadPrograms(args[1])
+	} else if args[1] == "evolve" {
+		programs := loadPrograms(args[2])
 		numIterations := 1000
 		if len(args) >= 3 {
-			numIterations, _ = strconv.Atoi(args[2])
+			numIterations, _ = strconv.Atoi(args[3])
 		}
 
 		originalArray := make([]int, memSize)
@@ -371,6 +414,10 @@ func main() {
 		fmt.Println("Average:", average(results), "Best:", best(results))
 		output, _ := json.Marshal(programs)
 		ioutil.WriteFile(args[1], output, 0644)
+	} else if args[1] == "print" {
+		programs := loadPrograms(args[2])
+		index, _ := strconv.Atoi(args[3])
+		fmt.Println(Program(programs[index]).Pretty())
 	}
 
 }
