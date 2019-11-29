@@ -14,13 +14,13 @@ import (
 
 const LEARNING_RATE = 0.3
 const MUTATION_RATE = 0.1
-const PROGRAM_LENGTH = 100
+const PROGRAM_LENGTH = 1000
 const ARRAY_SIZE = 100
 const VALUE_SIZE = 10000
 const NUM_STEPS = 1000
 const MEM_SIZE = 100
 
-var INSTRUCTION_SET = []InstructionType{JUMPLESSTHAN, JUMPZERO, SWAP, LABEL}
+var INSTRUCTION_SET = []InstructionType{JUMPLESSTHAN, SWAP, LABEL}
 
 type InstructionType int
 
@@ -196,16 +196,22 @@ func run(program []Instruction, mem []int, limit int) {
 		case LABEL:
 			// No-op
 		case SWAP:
-			assert(ins.Arg1.isRegister(), "Needs a register: "+ins.Pretty())
-			assert(ins.Arg2.isRegister(), "Needs a register: "+ins.Pretty())
-			val1 := decodeArgument(ins.Arg1, r0, r1, r2, nil)
-			val2 := decodeArgument(ins.Arg2, r0, r1, r2, nil)
-			if val1 < 0 || val1 >= len(mem) || val2 < 0 || val2 >= len(mem) {
-				return
+			val1, val2 := 0, 0
+			if ins.Arg1.isRegister() {
+				val1 = decodeArgument(ins.Arg1, r0, r1, r2, nil)
+			} else {
+				val1 = int(ins.Arg1)
 			}
-			swap := mem[val1]
-			mem[val1] = mem[val2]
-			mem[val2] = swap
+			if ins.Arg2.isRegister() {
+				val2 = decodeArgument(ins.Arg1, r0, r1, r2, nil)
+			} else {
+				val2 = int(ins.Arg2)
+			}
+			if val1 >= 0 || val1 < len(mem) || val2 >= 0 || val2 < len(mem) {
+				swap := mem[val1]
+				mem[val1] = mem[val2]
+				mem[val2] = swap
+			}
 		default:
 			fmt.Println("Unsupported instruction: ", ins.Type)
 		}
@@ -301,13 +307,13 @@ func randomIns() Instruction {
 	case DEC:
 		return Instruction{Type: DEC, Arg1: randomRegister()}
 	case JUMPLESSTHAN:
-		return Instruction{Type: JUMPLESSTHAN, StringArg: randomLabel(), Arg1: randomArgument(), Arg2: randomRegister()}
+		return Instruction{Type: JUMPLESSTHAN, StringArg: randomLabel(), Arg1: randomMemLocation(), Arg2: randomMemLocation()}
 	case JUMPZERO:
-		return Instruction{Type: JUMPZERO, StringArg: randomLabel(), Arg1: randomArgument()}
+		return Instruction{Type: JUMPZERO, StringArg: randomLabel(), Arg1: randomMemLocation()}
 	case LABEL:
 		return Instruction{Type: LABEL, StringArg: randomLabel()}
 	case SWAP:
-		return Instruction{Type: SWAP, Arg1: randomRegister(), Arg2: randomRegister()}
+		return Instruction{Type: SWAP, Arg1: randomMemLocation(), Arg2: randomMemLocation()}
 	default:
 		assert(false, "Incorrect instruction type: "+string(insType))
 	}
@@ -351,8 +357,6 @@ func evolve(programs [][]Instruction, rounds int) [][]Instruction {
 		for i := 0; i < programsToKeep; i++ {
 			newPrograms[i] = results[i].Program
 		}
-		fmt.Println("To keep", programsToKeep)
-		fmt.Println("Num new programs", numNewPrograms)
 		for i := 0; i < numNewPrograms/2; i++ {
 			newPrograms[programsToKeep+i] = mutate(newPrograms[rand.Intn(programsToKeep)])
 		}
