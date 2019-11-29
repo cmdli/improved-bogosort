@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"math/rand"
 	"os"
 	"sort"
@@ -11,22 +12,27 @@ import (
 	"time"
 )
 
-const LEARNING_RATE = 0.1
+const LEARNING_RATE = 0.3
 const MUTATION_RATE = 0.1
 const PROGRAM_LENGTH = 100
-const ARRAY_SIZE = 1000
+const ARRAY_SIZE = 100
 const VALUE_SIZE = 10000
+const NUM_STEPS = 1000
+const MEM_SIZE = 100
+
+var INSTRUCTION_SET = []InstructionType{JUMPLESSTHAN, JUMPZERO, SWAP, LABEL}
 
 type InstructionType int
 
 const (
 	SET          InstructionType = 0
-	READ                         = 1
-	WRITE                        = 2
-	COMPARE                      = 3
-	JUMPLESSTHAN                 = 4
-	JUMPEQUAL                    = 5
+	INC                          = 1
+	DEC                          = 2
+	JUMPLESSTHAN                 = 3
+	JUMPZERO                     = 4
+	SWAP                         = 5
 	LABEL                        = 6
+	READ                         = 7
 )
 
 type Argument int32
@@ -36,6 +42,10 @@ const (
 	R1 Argument = -2
 	R2 Argument = -1
 )
+
+func (arg Argument) isRegister() bool {
+	return arg == R0 || arg == R1 || arg == R2
+}
 
 func (arg Argument) Pretty() string {
 	if arg == R0 {
@@ -63,16 +73,16 @@ func (ins Instruction) Pretty() string {
 	switch ins.Type {
 	case SET:
 		return "SET " + ins.Arg1.Pretty() + " " + ins.Arg2.Pretty()
-	case READ:
-		return "READ " + ins.Arg1.Pretty() + " " + ins.Arg2.Pretty()
-	case WRITE:
-		return "WRITE " + ins.Arg1.Pretty() + " " + ins.Arg2.Pretty()
-	case COMPARE:
-		return "COMPARE " + ins.Arg1.Pretty() + " " + ins.Arg2.Pretty()
+	case INC:
+		return "INC " + ins.Arg1.Pretty()
+	case DEC:
+		return "DEC " + ins.Arg1.Pretty()
 	case JUMPLESSTHAN:
-		return "JLT " + ins.StringArg
-	case JUMPEQUAL:
-		return "JE " + ins.StringArg
+		return "JLT " + ins.Arg1.Pretty() + " " + ins.Arg2.Pretty() + " " + ins.StringArg
+	case JUMPZERO:
+		return "JZ " + ins.Arg1.Pretty() + " " + ins.StringArg
+	case SWAP:
+		return "SWAP " + ins.Arg1.Pretty() + " " + ins.Arg2.Pretty()
 	case LABEL:
 		return "LABEL " + ins.StringArg + ":"
 	default:
@@ -105,10 +115,10 @@ func decodeArgument(a Argument, r0 int, r1 int, r2 int, mem []int) int {
 		return r1
 	} else if a == R2 {
 		return r2
-	} else if a >= 0 && mem != nil {
+	} else if a < ARRAY_SIZE && a >= 0 {
 		return mem[a]
 	} else {
-		assert(false, "Invalid argument: "+string(a))
+		assert(false, "Invalid argument: "+a.Pretty())
 		return 0
 	}
 }
@@ -125,7 +135,6 @@ func jump(label string, program []Instruction, pc int) int {
 func run(program []Instruction, mem []int, limit int) {
 	r0, r1, r2 := 0, 0, 0
 	pc := 0
-	lessThan, equal := false, false
 	iterations := 0
 	for {
 		if pc >= len(program) || pc < 0 || iterations > limit {
@@ -134,6 +143,17 @@ func run(program []Instruction, mem []int, limit int) {
 		iterations++
 		ins := program[pc]
 		switch ins.Type {
+		case READ:
+			val := decodeArgument(ins.Arg2, r0, r1, r2, nil)
+			if ins.Arg1 == R0 {
+				r0 = val
+			} else if ins.Arg1 == R1 {
+				r1 = val
+			} else if ins.Arg1 == R2 {
+				r2 = val
+			} else {
+				assert(false, "Incorrect target: "+ins.String())
+			}
 		case SET:
 			if ins.Arg1 == R0 {
 				r0 = int(ins.Arg2)
@@ -144,43 +164,52 @@ func run(program []Instruction, mem []int, limit int) {
 			} else {
 				assert(false, "Incorrect target: "+ins.String())
 			}
-		case READ:
-			assert(ins.Arg2 >= 0, "Incorrect memory address: "+ins.String())
+		case INC:
+			assert(ins.Arg1.isRegister(), "Incorrect register argument: "+ins.Pretty())
 			if ins.Arg1 == R0 {
-				r0 = mem[ins.Arg2]
+				r0++
 			} else if ins.Arg1 == R1 {
-				r1 = mem[ins.Arg2]
+				r1++
 			} else if ins.Arg1 == R2 {
-				r2 = mem[ins.Arg2]
-			} else {
-				assert(false, "Incorrect target: "+ins.String())
+				r2++
 			}
-		case WRITE:
-			assert(ins.Arg2 >= 0, "Incorrect memory address: "+ins.String())
-			mem[ins.Arg2] = decodeArgument(ins.Arg1, r0, r1, r2, nil)
-		case COMPARE:
-			val1 := decodeArgument(ins.Arg1, r0, r1, r2, nil)
-			val2 := decodeArgument(ins.Arg2, r0, r1, r2, nil)
-			lessThan, equal = false, false
-			if val1 < val2 {
-				lessThan = true
-			} else if val1 == val2 {
-				equal = true
+		case DEC:
+			assert(ins.Arg1.isRegister(), "Incorrect register argument: "+ins.Pretty())
+			if ins.Arg1 == R0 {
+				r0--
+			} else if ins.Arg1 == R1 {
+				r1--
+			} else if ins.Arg1 == R2 {
+				r2--
 			}
 		case JUMPLESSTHAN:
-			if lessThan {
+			val1 := decodeArgument(ins.Arg1, r0, r1, r2, mem)
+			val2 := decodeArgument(ins.Arg2, r0, r1, r2, mem)
+			if val1 < val2 {
 				pc = jump(ins.StringArg, program, pc)
 			}
-		case JUMPEQUAL:
-			if equal {
+		case JUMPZERO:
+			val1 := decodeArgument(ins.Arg1, r0, r1, r2, mem)
+			if val1 == 0 {
 				pc = jump(ins.StringArg, program, pc)
 			}
 		case LABEL:
 			// No-op
+		case SWAP:
+			assert(ins.Arg1.isRegister(), "Needs a register: "+ins.Pretty())
+			assert(ins.Arg2.isRegister(), "Needs a register: "+ins.Pretty())
+			val1 := decodeArgument(ins.Arg1, r0, r1, r2, nil)
+			val2 := decodeArgument(ins.Arg2, r0, r1, r2, nil)
+			if val1 < 0 || val1 >= len(mem) || val2 < 0 || val2 >= len(mem) {
+				return
+			}
+			swap := mem[val1]
+			mem[val1] = mem[val2]
+			mem[val2] = swap
 		default:
 			fmt.Println("Unsupported instruction: ", ins.Type)
 		}
-		pc += 1
+		pc++
 	}
 }
 
@@ -196,38 +225,15 @@ func (b ByScore) Swap(i int, j int)  { b[i], b[j] = b[j], b[i] }
 func (b ByScore) Less(i, j int) bool { return b[i].Score < b[j].Score }
 
 func testProgram(program []Instruction, originalArray []int) (float64, []int) {
-	mem := make([]int, 10000)
-	numCounts := make(map[int]int)
-	for i, num := range originalArray {
-		mem[i] = num
-		count, ok := numCounts[num]
-		if ok {
-			numCounts[num] = count + 1
-		} else {
-			numCounts[num] = 1
-		}
-	}
-	run(program, mem, 10000)
+	mem := make([]int, MEM_SIZE)
+	copy(mem, originalArray)
+	run(program, mem, NUM_STEPS)
 	score := 0.0
-	testCounts := make(map[int]int)
-	for i := 0; i < len(originalArray)-1; i++ {
-		if mem[i+1] < mem[i] {
+	for i := range originalArray {
+		if i+1 < len(mem) && mem[i+1] < mem[i] {
 			score -= 1.0
 		}
-		count, ok := testCounts[mem[i]]
-		if ok {
-			testCounts[mem[i]] = count + 1
-		} else {
-			testCounts[mem[i]] = 1
-		}
 	}
-	/*for num, count := range numCounts {
-		testCount, ok := testCounts[num]
-		if !ok {
-			testCount = 0
-		}
-		score -= math.Abs(float64(count - testCount))
-	}*/
 	return score, mem
 }
 
@@ -243,6 +249,10 @@ func testPrograms(programs [][]Instruction, originalArray []int) []Result {
 	return results
 }
 
+func randomMemLocation() Argument {
+	return Argument(rand.Intn(ARRAY_SIZE))
+}
+
 func randomRegister() Argument {
 	switch rand.Intn(3) {
 	case 0:
@@ -256,29 +266,50 @@ func randomRegister() Argument {
 	return R0
 }
 
+func randomArgument() Argument {
+	switch rand.Intn(4) {
+	case 0:
+		return R0
+	case 1:
+		return R1
+	case 2:
+		return R2
+	case 3:
+		return randomMemLocation()
+	}
+	assert(false, "Invalid code in randomRegister")
+	return R0
+}
+
 func randomLabel() string {
 	return "L" + strconv.Itoa(rand.Intn(10))
 }
 
+func choice(ins []InstructionType) InstructionType {
+	return ins[rand.Intn(len(ins))]
+}
+
 func randomIns() Instruction {
-	Type := InstructionType(rand.Intn(7))
-	switch Type {
-	case SET:
-		return Instruction{Type: SET, Arg1: randomRegister(), Arg2: Argument(rand.Intn(VALUE_SIZE))}
+	insType := choice(INSTRUCTION_SET)
+	switch insType {
 	case READ:
-		return Instruction{Type: READ, Arg1: randomRegister(), Arg2: Argument(rand.Intn(ARRAY_SIZE))}
-	case WRITE:
-		return Instruction{Type: WRITE, Arg1: randomRegister(), Arg2: Argument(rand.Intn(ARRAY_SIZE))}
-	case COMPARE:
-		return Instruction{Type: COMPARE, Arg1: randomRegister(), Arg2: randomRegister()}
+		return Instruction{Type: SET, Arg1: randomMemLocation(), Arg2: randomRegister()}
+	case SET:
+		return Instruction{Type: SET, Arg1: randomRegister(), Arg2: Argument(rand.Intn(ARRAY_SIZE))}
+	case INC:
+		return Instruction{Type: INC, Arg1: randomRegister()}
+	case DEC:
+		return Instruction{Type: DEC, Arg1: randomRegister()}
 	case JUMPLESSTHAN:
-		return Instruction{Type: JUMPLESSTHAN, StringArg: randomLabel()}
-	case JUMPEQUAL:
-		return Instruction{Type: JUMPEQUAL, StringArg: randomLabel()}
+		return Instruction{Type: JUMPLESSTHAN, StringArg: randomLabel(), Arg1: randomArgument(), Arg2: randomRegister()}
+	case JUMPZERO:
+		return Instruction{Type: JUMPZERO, StringArg: randomLabel(), Arg1: randomArgument()}
 	case LABEL:
 		return Instruction{Type: LABEL, StringArg: randomLabel()}
+	case SWAP:
+		return Instruction{Type: SWAP, Arg1: randomRegister(), Arg2: randomRegister()}
 	default:
-		assert(false, "Incorrect instruction type: "+string(Type))
+		assert(false, "Incorrect instruction type: "+string(insType))
 	}
 	return Instruction{Type: LABEL, StringArg: "NoOp"}
 }
@@ -299,13 +330,40 @@ func nullProgram(length int) []Instruction {
 	return program
 }
 
-func evolve(program []Instruction) []Instruction {
+func mutate(program []Instruction) []Instruction {
 	newProgram := make([]Instruction, len(program))
 	copy(newProgram, program)
 	for i := 0; i < int(float64(len(program))*MUTATION_RATE); i++ {
 		program[rand.Intn(len(program))] = randomIns()
 	}
 	return newProgram
+}
+
+func evolve(programs [][]Instruction, rounds int) [][]Instruction {
+	array := make([]int, ARRAY_SIZE)
+	fmt.Printf("Round: ")
+	for i := 0; i < rounds; i++ {
+		randomize(array, VALUE_SIZE)
+		results := testPrograms(programs, array)
+		programsToKeep := int(float64(len(results)) * (1.0 - LEARNING_RATE))
+		numNewPrograms := len(programs) - programsToKeep
+		newPrograms := make([][]Instruction, len(programs))
+		for i := 0; i < programsToKeep; i++ {
+			newPrograms[i] = results[i].Program
+		}
+		fmt.Println("To keep", programsToKeep)
+		fmt.Println("Num new programs", numNewPrograms)
+		for i := 0; i < numNewPrograms/2; i++ {
+			newPrograms[programsToKeep+i] = mutate(newPrograms[rand.Intn(programsToKeep)])
+		}
+		for i := numNewPrograms / 2; i < numNewPrograms; i++ {
+			newPrograms[programsToKeep+i] = randomProgram(len(programs[0]))
+		}
+		programs = newPrograms
+		fmt.Printf("\rRound: %d", i+1)
+	}
+	fmt.Println()
+	return programs
 }
 
 func randomize(array []int, numberRange int) {
@@ -331,8 +389,12 @@ func loadPrograms(filename string) [][]Instruction {
 
 func writePrograms(filename string, programs [][]Instruction) {
 	output, err := json.Marshal(programs)
-	if err == nil {
-		ioutil.WriteFile(filename, output, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = ioutil.WriteFile(filename, output, 0644)
+	if err != nil {
+		log.Fatal(err)
 	}
 }
 
@@ -356,7 +418,6 @@ func average(results []Result) float64 {
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
-	shouldRandomize := true
 	args := os.Args
 	if args[1] == "generate" {
 
@@ -383,45 +444,21 @@ func main() {
 		println("Average score:", sum/float64(count))
 	} else if args[1] == "evolve" {
 		programs := loadPrograms(args[2])
-		numIterations := 1000
+		numIterations := 100
 		if len(args) >= 3 {
 			numIterations, _ = strconv.Atoi(args[3])
 		}
-
 		originalArray := make([]int, ARRAY_SIZE)
 		randomize(originalArray, VALUE_SIZE)
 		results := testPrograms(programs, originalArray)
 		fmt.Println("Average before:", average(results), "Best before:", best(results))
-
-		array := make([]int, ARRAY_SIZE)
-		randomize(array, VALUE_SIZE)
-		for i := 0; i < numIterations; i++ {
-			if shouldRandomize {
-				randomize(array, VALUE_SIZE)
-			}
-			results := testPrograms(programs, array)
-			programsToKeep := int(float64(len(results)) * (1.0 - LEARNING_RATE))
-			newPrograms := make([][]Instruction, len(programs))
-			for i := 0; i < programsToKeep; i++ {
-				newPrograms[i] = results[i].Program
-			}
-			for i := programsToKeep; i < len(programs)-1; i++ {
-				newPrograms[i] = evolve(newPrograms[rand.Intn(programsToKeep)])
-			}
-			newPrograms[len(programs)-1] = randomProgram(len(programs[0]))
-			programs = newPrograms
-			output, _ := json.Marshal(programs)
-			ioutil.WriteFile(args[1], output, 0644)
-		}
-
+		evolve(programs, numIterations)
 		results = testPrograms(programs, originalArray)
-		fmt.Println("Average:", average(results), "Best:", best(results))
-		output, _ := json.Marshal(programs)
-		ioutil.WriteFile(args[1], output, 0644)
+		fmt.Println("Average after:", average(results), "Best after:", best(results))
+		writePrograms(args[2], programs)
 	} else if args[1] == "print" {
 		programs := loadPrograms(args[2])
 		index, _ := strconv.Atoi(args[3])
 		fmt.Println(Program(programs[index]).Pretty())
 	}
-
 }
