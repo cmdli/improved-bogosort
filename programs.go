@@ -9,10 +9,18 @@ import (
 	"strconv"
 )
 
-var INSTRUCTION_SET = []InstructionType{JUMPLESSTHAN, SWAP, LABEL}
+var INSTRUCTION_SET = []InstructionType{SET, JUMPLESSTHAN, SWAP, LABEL}
 
 type InstructionType int
 
+/*
+Example
+SET R0 0
+SET R1 1
+JUMPLESSTHAN R0 R1 L0
+SWAP R0 R1
+LABEL L0
+*/
 const (
 	SET          InstructionType = 0
 	INC                          = 1
@@ -67,9 +75,9 @@ func (ins Instruction) Pretty() string {
 	case DEC:
 		return "DEC " + ins.Arg1.Pretty()
 	case JUMPLESSTHAN:
-		return "JLT " + ins.Arg1.Pretty() + " " + ins.Arg2.Pretty() + " " + ins.StringArg
+		return "JUMPLESSTHAN " + ins.Arg1.Pretty() + " " + ins.Arg2.Pretty() + " " + ins.StringArg
 	case JUMPZERO:
-		return "JZ " + ins.Arg1.Pretty() + " " + ins.StringArg
+		return "JUMPZERO " + ins.Arg1.Pretty() + " " + ins.StringArg
 	case SWAP:
 		return "SWAP " + ins.Arg1.Pretty() + " " + ins.Arg2.Pretty()
 	case LABEL:
@@ -134,21 +142,21 @@ func randomIns() Instruction {
 	insType := choice(INSTRUCTION_SET)
 	switch insType {
 	case READ:
-		return Instruction{Type: SET, Arg1: randomMemLocation(), Arg2: randomRegister()}
+		return Instruction{Type: SET, Arg1: randomRegister(), Arg2: randomMemLocation()}
 	case SET:
-		return Instruction{Type: SET, Arg1: randomRegister(), Arg2: Argument(rand.Intn(ARRAY_SIZE))}
+		return Instruction{Type: SET, Arg1: randomRegister(), Arg2: randomMemLocation()}
 	case INC:
 		return Instruction{Type: INC, Arg1: randomRegister()}
 	case DEC:
 		return Instruction{Type: DEC, Arg1: randomRegister()}
 	case JUMPLESSTHAN:
-		return Instruction{Type: JUMPLESSTHAN, StringArg: randomLabel(), Arg1: randomMemLocation(), Arg2: randomMemLocation()}
+		return Instruction{Type: JUMPLESSTHAN, StringArg: randomLabel(), Arg1: randomRegister(), Arg2: randomRegister()}
 	case JUMPZERO:
-		return Instruction{Type: JUMPZERO, StringArg: randomLabel(), Arg1: randomMemLocation()}
+		return Instruction{Type: JUMPZERO, StringArg: randomLabel(), Arg1: randomRegister()}
 	case LABEL:
 		return Instruction{Type: LABEL, StringArg: randomLabel()}
 	case SWAP:
-		return Instruction{Type: SWAP, Arg1: randomMemLocation(), Arg2: randomMemLocation()}
+		return Instruction{Type: SWAP, Arg1: randomRegister(), Arg2: randomRegister()}
 	default:
 		assert(false, "Incorrect instruction type: "+string(insType))
 	}

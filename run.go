@@ -7,7 +7,7 @@ import (
 )
 
 type Result struct {
-	Program []Instruction
+	Program Program
 	Score   float64
 }
 
@@ -24,11 +24,23 @@ func decodeArgument(a Argument, r0 int, r1 int, r2 int, mem []int) int {
 		return r1
 	} else if a == R2 {
 		return r2
-	} else if a < ARRAY_SIZE && a >= 0 {
+	} else if mem != nil && a < ARRAY_SIZE && a >= 0 {
 		return mem[a]
 	} else {
 		assert(false, "Invalid argument: "+a.Pretty())
 		return 0
+	}
+}
+
+func setRegister(a Argument, r0 *int, r1 *int, r2 *int, val int) {
+	if a == R0 {
+		*r0 = val
+	} else if a == R1 {
+		*r1 = val
+	} else if a == R2 {
+		*r2 = val
+	} else {
+		assert(false, "Not a register: "+a.Pretty())
 	}
 }
 
@@ -53,44 +65,18 @@ func run(program Program, mem []int, limit int) {
 		ins := program[pc]
 		switch ins.Type {
 		case READ:
-			val := decodeArgument(ins.Arg2, r0, r1, r2, nil)
-			if ins.Arg1 == R0 {
-				r0 = val
-			} else if ins.Arg1 == R1 {
-				r1 = val
-			} else if ins.Arg1 == R2 {
-				r2 = val
-			} else {
-				assert(false, "Incorrect target: "+ins.String())
-			}
+			val := decodeArgument(ins.Arg2, r0, r1, r2, mem)
+			setRegister(ins.Arg1, &r0, &r1, &r2, val)
 		case SET:
-			if ins.Arg1 == R0 {
-				r0 = int(ins.Arg2)
-			} else if ins.Arg1 == R1 {
-				r1 = int(ins.Arg2)
-			} else if ins.Arg1 == R2 {
-				r2 = int(ins.Arg2)
-			} else {
-				assert(false, "Incorrect target: "+ins.String())
-			}
+			setRegister(ins.Arg1, &r0, &r1, &r2, int(ins.Arg2))
 		case INC:
 			assert(ins.Arg1.isRegister(), "Incorrect register argument: "+ins.Pretty())
-			if ins.Arg1 == R0 {
-				r0++
-			} else if ins.Arg1 == R1 {
-				r1++
-			} else if ins.Arg1 == R2 {
-				r2++
-			}
+			val := decodeArgument(ins.Arg1, r0, r1, r2, nil)
+			setRegister(ins.Arg1, &r0, &r1, &r2, val+1)
 		case DEC:
 			assert(ins.Arg1.isRegister(), "Incorrect register argument: "+ins.Pretty())
-			if ins.Arg1 == R0 {
-				r0--
-			} else if ins.Arg1 == R1 {
-				r1--
-			} else if ins.Arg1 == R2 {
-				r2--
-			}
+			val := decodeArgument(ins.Arg1, r0, r1, r2, nil)
+			setRegister(ins.Arg1, &r0, &r1, &r2, val-1)
 		case JUMPLESSTHAN:
 			val1 := decodeArgument(ins.Arg1, r0, r1, r2, mem)
 			val2 := decodeArgument(ins.Arg2, r0, r1, r2, mem)
@@ -112,7 +98,7 @@ func run(program Program, mem []int, limit int) {
 				val1 = int(ins.Arg1)
 			}
 			if ins.Arg2.isRegister() {
-				val2 = decodeArgument(ins.Arg1, r0, r1, r2, nil)
+				val2 = decodeArgument(ins.Arg2, r0, r1, r2, nil)
 			} else {
 				val2 = int(ins.Arg2)
 			}
@@ -128,7 +114,7 @@ func run(program Program, mem []int, limit int) {
 	}
 }
 
-func testProgram(program Program, originalArray []int) (float64, []int) {
+func testProgram(program Program, originalArray []int) (Result, []int) {
 	mem := make([]int, MEM_SIZE)
 	copy(mem, originalArray)
 	run(program, mem, NUM_STEPS)
@@ -138,14 +124,14 @@ func testProgram(program Program, originalArray []int) (float64, []int) {
 			score -= 1.0
 		}
 	}
-	return score, mem
+	return Result{program, score}, mem
 }
 
 func testPrograms(programs []Program, originalArray []int) []Result {
 	results := []Result{}
 	for _, prog := range programs {
-		score, _ := testProgram(prog, originalArray)
-		results = append(results, Result{prog, score})
+		result, _ := testProgram(prog, originalArray)
+		results = append(results, result)
 	}
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].Score > results[j].Score
@@ -171,9 +157,11 @@ func average(results []Result) float64 {
 	return average / float64(len(results))
 }
 
-func evolve(programs []Program, rounds int) []Program {
+func evolve(programs []Program, rounds int, print bool) []Program {
 	array := make([]int, ARRAY_SIZE)
-	fmt.Printf("Round: ")
+	if print {
+		fmt.Printf("Round: ")
+	}
 	for i := 0; i < rounds; i++ {
 		randomize(array, VALUE_SIZE)
 		results := testPrograms(programs, array)
@@ -190,8 +178,12 @@ func evolve(programs []Program, rounds int) []Program {
 			newPrograms[programsToKeep+i] = randomProgram(len(programs[0]))
 		}
 		programs = newPrograms
-		fmt.Printf("\rRound: %d", i+1)
+		if print {
+			fmt.Printf("\rRound: %d", i+1)
+		}
 	}
-	fmt.Println()
+	if print {
+		fmt.Println()
+	}
 	return programs
 }

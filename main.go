@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"math/rand"
-	"os"
 	"time"
 )
 
@@ -31,7 +30,6 @@ func randomize(array []int, numberRange int) {
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
-	args := os.Args
 	command := flag.String("cmd", "", "Command to run")
 	numPrograms := flag.Int("num_programs", -1, "Number of programs to generate")
 	programFile := flag.String("programs", "", "Programs to load")
@@ -45,22 +43,28 @@ func main() {
 			programs = append(programs, randomProgram(PROGRAM_LENGTH))
 		}
 		programs[0] = nullProgram(PROGRAM_LENGTH)
-		writePrograms(args[2], programs)
+		writePrograms(*programFile, programs)
 	} else if *command == "test" {
 		assert(*programFile != "", "Need program file, see -h for help")
 		programs := loadPrograms(*programFile)
 		array := make([]int, ARRAY_SIZE)
-		sum := 0.0
-		count := 0
-		for i := 0; i < 100; i++ {
+		sum := int64(0)
+		count := int64(0)
+		for i := 0; i < 1000; i++ {
 			randomize(array, VALUE_SIZE)
-			results := testPrograms(programs, array)
+			results := []Result{}
+			if *index >= 0 {
+				result, _ := testProgram(programs[*index], array)
+				results = []Result{result}
+			} else {
+				results = testPrograms(programs, array)
+			}
 			for _, result := range results {
-				sum += result.Score
+				sum += int64(result.Score)
 				count++
 			}
 		}
-		println("Average score:", sum/float64(count))
+		println("Average score:", float64(sum)/float64(count))
 	} else if *command == "evolve" {
 		assert(*programFile != "", "Need program file, see -h for help")
 		programs := loadPrograms(*programFile)
@@ -68,10 +72,10 @@ func main() {
 		randomize(originalArray, VALUE_SIZE)
 		results := testPrograms(programs, originalArray)
 		fmt.Println("Average before:", average(results), "Best before:", best(results))
-		evolve(programs, *numIterations)
+		evolve(programs, *numIterations, false)
 		results = testPrograms(programs, originalArray)
 		fmt.Println("Average after:", average(results), "Best after:", best(results))
-		writePrograms(args[2], programs)
+		writePrograms(*programFile, programs)
 	} else if *command == "print" {
 		assert(*programFile != "", "Need program file, see -h for help")
 		assert(*index >= 0, "Need index, see -h for help")
