@@ -17,7 +17,10 @@ func (b ByScore) Len() int           { return len(b) }
 func (b ByScore) Swap(i int, j int)  { b[i], b[j] = b[j], b[i] }
 func (b ByScore) Less(i, j int) bool { return b[i].Score < b[j].Score }
 
-func decodeArgument(a Argument, r0 int, r1 int, r2 int, mem []int) int {
+// Returns 'a' as interpreted as a value
+// Register -> Register value
+// Memory location -> Memory value
+func getValue(a Argument, r0 int, r1 int, r2 int, mem []int) int {
 	if a == R0 {
 		return r0
 	} else if a == R1 {
@@ -30,6 +33,14 @@ func decodeArgument(a Argument, r0 int, r1 int, r2 int, mem []int) int {
 		assert(false, "Invalid argument: "+a.Pretty())
 		return 0
 	}
+}
+
+// Returns 'a' as intepreted as a memory location
+func getMemLocation(a Argument, r0 int, r1 int, r2 int) int {
+	if a.isRegister() {
+		return getValue(a, r0, r1, r2, nil)
+	}
+	return int(a)
 }
 
 func setRegister(a Argument, r0 *int, r1 *int, r2 *int, val int) {
@@ -58,59 +69,50 @@ func run(program Program, mem []int, limit int) {
 	pc := 0
 	iterations := 0
 	for {
-		if pc >= len(program) || pc < 0 || iterations > limit {
+		if pc >= len(program) || pc < 0 || iterations >= limit {
 			break
 		}
-		iterations++
 		ins := program[pc]
 		switch ins.Type {
 		case READ:
-			val := decodeArgument(ins.Arg2, r0, r1, r2, mem)
+			val := getValue(ins.Arg2, r0, r1, r2, mem)
 			setRegister(ins.Arg1, &r0, &r1, &r2, val)
 		case SET:
 			setRegister(ins.Arg1, &r0, &r1, &r2, int(ins.Arg2))
 		case INC:
 			assert(ins.Arg1.isRegister(), "Incorrect register argument: "+ins.Pretty())
-			val := decodeArgument(ins.Arg1, r0, r1, r2, nil)
+			val := getValue(ins.Arg1, r0, r1, r2, nil)
 			setRegister(ins.Arg1, &r0, &r1, &r2, val+1)
 		case DEC:
 			assert(ins.Arg1.isRegister(), "Incorrect register argument: "+ins.Pretty())
-			val := decodeArgument(ins.Arg1, r0, r1, r2, nil)
+			val := getValue(ins.Arg1, r0, r1, r2, nil)
 			setRegister(ins.Arg1, &r0, &r1, &r2, val-1)
 		case JUMPLESSTHAN:
-			val1 := decodeArgument(ins.Arg1, r0, r1, r2, mem)
-			val2 := decodeArgument(ins.Arg2, r0, r1, r2, mem)
+			val1 := getValue(ins.Arg1, r0, r1, r2, mem)
+			val2 := getValue(ins.Arg2, r0, r1, r2, mem)
 			if val1 < val2 {
 				pc = jump(ins.StringArg, program, pc)
 			}
 		case JUMPZERO:
-			val1 := decodeArgument(ins.Arg1, r0, r1, r2, mem)
+			val1 := getValue(ins.Arg1, r0, r1, r2, mem)
 			if val1 == 0 {
 				pc = jump(ins.StringArg, program, pc)
 			}
 		case LABEL:
 			// No-op
 		case SWAP:
-			val1, val2 := 0, 0
-			if ins.Arg1.isRegister() {
-				val1 = decodeArgument(ins.Arg1, r0, r1, r2, nil)
-			} else {
-				val1 = int(ins.Arg1)
-			}
-			if ins.Arg2.isRegister() {
-				val2 = decodeArgument(ins.Arg2, r0, r1, r2, nil)
-			} else {
-				val2 = int(ins.Arg2)
-			}
-			if val1 >= 0 || val1 < len(mem) || val2 >= 0 || val2 < len(mem) {
-				swap := mem[val1]
-				mem[val1] = mem[val2]
-				mem[val2] = swap
+			loc1 := getMemLocation(ins.Arg1, r0, r1, r2)
+			loc2 := getMemLocation(ins.Arg2, r0, r1, r2)
+			if loc1 >= 0 || loc1 < len(mem) || loc2 >= 0 || loc2 < len(mem) {
+				swap := mem[loc1]
+				mem[loc1] = mem[loc2]
+				mem[loc2] = swap
 			}
 		default:
 			fmt.Println("Unsupported instruction: ", ins.Type)
 		}
 		pc++
+		iterations++
 	}
 }
 
