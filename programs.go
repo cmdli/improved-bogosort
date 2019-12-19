@@ -9,7 +9,7 @@ import (
 	"strconv"
 )
 
-var INSTRUCTION_SET = []InstructionType{SET, JUMPLESSTHAN, SWAP, LABEL}
+var INSTRUCTION_SET = []InstructionType{SET, JUMPLESSTHAN, SWAP}
 
 type InstructionType int
 
@@ -30,6 +30,7 @@ const (
 	SWAP                         = 5
 	LABEL                        = 6
 	READ                         = 7
+	JUMP                         = 8
 )
 
 type Argument int32
@@ -56,10 +57,11 @@ func (arg Argument) Pretty() string {
 }
 
 type Instruction struct {
-	Type      InstructionType
-	Arg1      Argument
-	Arg2      Argument
-	StringArg string
+	Type       InstructionType
+	Arg1       Argument
+	Arg2       Argument
+	JumpOffset int
+	StringArg  string
 }
 
 func (ins Instruction) String() string {
@@ -75,15 +77,17 @@ func (ins Instruction) Pretty() string {
 	case DEC:
 		return "DEC " + ins.Arg1.Pretty()
 	case JUMPLESSTHAN:
-		return "JUMPLESSTHAN " + ins.Arg1.Pretty() + " " + ins.Arg2.Pretty() + " " + ins.StringArg
+		return "JUMPLESSTHAN " + ins.Arg1.Pretty() + " " + ins.Arg2.Pretty() + " " + strconv.Itoa(ins.JumpOffset)
 	case JUMPZERO:
-		return "JUMPZERO " + ins.Arg1.Pretty() + " " + ins.StringArg
+		return "JUMPZERO " + ins.Arg1.Pretty() + " " + strconv.Itoa(ins.JumpOffset)
 	case SWAP:
 		return "SWAP " + ins.Arg1.Pretty() + " " + ins.Arg2.Pretty()
 	case LABEL:
 		return "LABEL " + ins.StringArg + ":"
+	case JUMP:
+		return "JUMP " + strconv.Itoa(ins.JumpOffset)
 	default:
-		assert(false, "Incorrect instruction type: "+string(ins.Type))
+		assert(false, "Incorrect instruction type: "+strconv.Itoa(int(ins.Type)))
 	}
 	return "INVALID"
 }
@@ -115,7 +119,7 @@ func randomRegister() Argument {
 	return R0
 }
 
-func randomArgument() Argument {
+func randomArgument(excluding Argument) Argument {
 	switch rand.Intn(4) {
 	case 0:
 		return R0
@@ -134,36 +138,57 @@ func randomLabel() string {
 	return "L" + strconv.Itoa(rand.Intn(10))
 }
 
+func randomJumpOffset() int {
+	offset := rand.Intn(20) - 10
+	if offset == -1 {
+		offset = 0
+	}
+	return offset
+}
+
 func choice(ins []InstructionType) InstructionType {
 	return ins[rand.Intn(len(ins))]
 }
 
+func shuffle(arr []Argument) {
+	for i := range arr {
+		dst := rand.Intn(len(arr)-i) + i
+		swap := arr[dst]
+		arr[dst] = arr[i]
+		arr[i] = swap
+	}
+}
+
 func randomIns() Instruction {
+	registers := []Argument{R0, R1, R2}
+	shuffle(registers)
 	insType := choice(INSTRUCTION_SET)
 	switch insType {
 	case READ:
-		return Instruction{Type: SET, Arg1: randomRegister(), Arg2: randomMemLocation()}
+		return Instruction{Type: SET, Arg1: registers[0], Arg2: randomMemLocation()}
 	case SET:
-		return Instruction{Type: SET, Arg1: randomRegister(), Arg2: randomMemLocation()}
+		return Instruction{Type: SET, Arg1: registers[0], Arg2: randomMemLocation()}
 	case INC:
-		return Instruction{Type: INC, Arg1: randomRegister()}
+		return Instruction{Type: INC, Arg1: registers[0]}
 	case DEC:
-		return Instruction{Type: DEC, Arg1: randomRegister()}
+		return Instruction{Type: DEC, Arg1: registers[0]}
 	case JUMPLESSTHAN:
-		return Instruction{Type: JUMPLESSTHAN, StringArg: randomLabel(), Arg1: randomRegister(), Arg2: randomRegister()}
+		return Instruction{Type: JUMPLESSTHAN, JumpOffset: randomJumpOffset(), Arg1: registers[0], Arg2: registers[1]}
 	case JUMPZERO:
-		return Instruction{Type: JUMPZERO, StringArg: randomLabel(), Arg1: randomRegister()}
+		return Instruction{Type: JUMPZERO, JumpOffset: randomJumpOffset(), Arg1: registers[0]}
 	case LABEL:
 		return Instruction{Type: LABEL, StringArg: randomLabel()}
 	case SWAP:
-		return Instruction{Type: SWAP, Arg1: randomRegister(), Arg2: randomRegister()}
+		return Instruction{Type: SWAP, Arg1: registers[0], Arg2: registers[1]}
+	case JUMP:
+		return Instruction{Type: JUMP, JumpOffset: randomJumpOffset()}
 	default:
 		assert(false, "Incorrect instruction type: "+string(insType))
 	}
 	return Instruction{Type: LABEL, StringArg: "NoOp"}
 }
 
-func randomProgram(length int) []Instruction {
+func randomProgram(length int) Program {
 	prog := []Instruction{}
 	for i := 0; i < length; i++ {
 		prog = append(prog, randomIns())
@@ -171,7 +196,7 @@ func randomProgram(length int) []Instruction {
 	return prog
 }
 
-func nullProgram(length int) []Instruction {
+func nullProgram(length int) Program {
 	program := []Instruction{}
 	for i := 0; i < length; i++ {
 		program = append(program, Instruction{Type: LABEL, StringArg: "NO-OP"})
@@ -205,7 +230,7 @@ func writePrograms(filename string, programs []Program) {
 	}
 }
 
-func mutate(program []Instruction) []Instruction {
+func mutate(program Program) Program {
 	newProgram := make([]Instruction, len(program))
 	copy(newProgram, program)
 	for i := 0; i < int(float64(len(program))*MUTATION_RATE); i++ {

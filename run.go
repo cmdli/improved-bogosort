@@ -27,12 +27,24 @@ func getValue(a Argument, r0 int, r1 int, r2 int, mem []int) int {
 		return r1
 	} else if a == R2 {
 		return r2
-	} else if mem != nil && a < ARRAY_SIZE && a >= 0 {
+	} else { // if mem != nil && a < ARRAY_SIZE && a >= 0 {
 		return mem[a]
-	} else {
-		assert(false, "Invalid argument: "+a.Pretty())
+	}
+	// else {
+	// 	assert(false, "Invalid argument: "+a.Pretty())
+	// 	return 0
+	// }
+}
+
+func getMemValue(a Argument, r0 int, r1 int, r2 int, mem []int) int {
+	loc := int(a)
+	if a.isRegister() {
+		loc = getValue(a, r0, r1, r2, nil)
+	}
+	if loc < 0 || loc >= len(mem) {
 		return 0
 	}
+	return mem[loc]
 }
 
 // Returns 'a' as intepreted as a memory location
@@ -51,7 +63,8 @@ func setRegister(a Argument, r0 *int, r1 *int, r2 *int, val int) {
 	} else if a == R2 {
 		*r2 = val
 	} else {
-		assert(false, "Not a register: "+a.Pretty())
+		//assert(false, "Not a register: "+a.Pretty())
+		return
 	}
 }
 
@@ -88,26 +101,28 @@ func run(program Program, mem []int, limit int) {
 			val := getValue(ins.Arg1, r0, r1, r2, nil)
 			setRegister(ins.Arg1, &r0, &r1, &r2, val-1)
 		case JUMPLESSTHAN:
-			val1 := getValue(ins.Arg1, r0, r1, r2, mem)
-			val2 := getValue(ins.Arg2, r0, r1, r2, mem)
+			val1 := getMemValue(ins.Arg1, r0, r1, r2, mem)
+			val2 := getMemValue(ins.Arg2, r0, r1, r2, mem)
 			if val1 < val2 {
-				pc = jump(ins.StringArg, program, pc)
+				pc += ins.JumpOffset
 			}
 		case JUMPZERO:
-			val1 := getValue(ins.Arg1, r0, r1, r2, mem)
+			val1 := getMemValue(ins.Arg1, r0, r1, r2, mem)
 			if val1 == 0 {
-				pc = jump(ins.StringArg, program, pc)
+				pc += ins.JumpOffset
 			}
 		case LABEL:
 			// No-op
 		case SWAP:
 			loc1 := getMemLocation(ins.Arg1, r0, r1, r2)
 			loc2 := getMemLocation(ins.Arg2, r0, r1, r2)
-			if loc1 >= 0 || loc1 < len(mem) || loc2 >= 0 || loc2 < len(mem) {
+			if loc1 >= 0 && loc1 < len(mem) && loc2 >= 0 && loc2 < len(mem) {
 				swap := mem[loc1]
 				mem[loc1] = mem[loc2]
 				mem[loc2] = swap
 			}
+		case JUMP:
+			pc += ins.JumpOffset
 		default:
 			fmt.Println("Unsupported instruction: ", ins.Type)
 		}
@@ -179,7 +194,7 @@ func evolve(programs []Program, rounds int, print bool) []Program {
 		for i := numNewPrograms / 2; i < numNewPrograms; i++ {
 			newPrograms[programsToKeep+i] = randomProgram(len(programs[0]))
 		}
-		programs = newPrograms
+		copy(programs, newPrograms)
 		if print {
 			fmt.Printf("\rRound: %d", i+1)
 		}
@@ -188,4 +203,23 @@ func evolve(programs []Program, rounds int, print bool) []Program {
 		fmt.Println()
 	}
 	return programs
+}
+
+func measure(program Program, count int) float64 {
+	array := make([]int, ARRAY_SIZE)
+	sum := int64(0)
+	for i := 0; i < count; i++ {
+		randomize(array, VALUE_SIZE)
+		result, _ := testProgram(program, array)
+		sum += int64(result.Score)
+	}
+	return float64(sum) / float64(count)
+}
+
+func measureMulti(programs []Program, count int) float64 {
+	sum := 0.0
+	for _, program := range programs {
+		sum += measure(program, count)
+	}
+	return sum / float64(len(programs))
 }
