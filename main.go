@@ -7,12 +7,13 @@ import (
 	"time"
 )
 
-const LEARNING_RATE = 0.3
+const DEBUG = false
+const LEARNING_RATE = 0.1
 const MUTATION_RATE = 0.1
 const PROGRAM_LENGTH = 100
 const ARRAY_SIZE = 100
 const VALUE_SIZE = 10000
-const NUM_STEPS = 100000
+const NUM_STEPS = 10000
 const MEM_SIZE = 100
 
 func assert(b bool, err string) {
@@ -76,7 +77,11 @@ func main() {
 	} else if *command == "test" {
 		assert(*programFile != "", "Need program file, see -h for help")
 		programs := loadPrograms(*programFile)
-		fmt.Println("Average score:", measureMulti(programs, 100))
+		if *index >= 0 {
+			fmt.Println("Score:", measure(programs[*index], 1000))
+		} else {
+			fmt.Println("Average score:", measureMulti(programs, 100))
+		}
 	} else if *command == "evolve" {
 		assert(*programFile != "", "Need program file, see -h for help")
 		programs := loadPrograms(*programFile)
@@ -97,6 +102,8 @@ func main() {
 		result, after := testProgram(program, array)
 		fmt.Println("After:", after)
 		fmt.Println("Score:", result.Score)
+	} else if *command == "random_prog" {
+		fmt.Println(randomProgram(PROGRAM_LENGTH).Pretty())
 	} else {
 		fmt.Println("Unrecognized command ", *command)
 	}

@@ -27,18 +27,18 @@ func getValue(a Argument, r0 int, r1 int, r2 int, mem []int) int {
 		return r1
 	} else if a == R2 {
 		return r2
-	} else { // if mem != nil && a < ARRAY_SIZE && a >= 0 {
+	} else if mem != nil && a < ARRAY_SIZE && a >= 0 {
 		return mem[a]
 	}
-	// else {
-	// 	assert(false, "Invalid argument: "+a.Pretty())
-	// 	return 0
-	// }
+	if DEBUG {
+		assert(false, "Invalid argument: "+a.Pretty())
+	}
+	return 0
 }
 
 func getMemValue(a Argument, r0 int, r1 int, r2 int, mem []int) int {
 	loc := int(a)
-	if a.isRegister() {
+	if a == R0 || a == R1 || a == R2 {
 		loc = getValue(a, r0, r1, r2, nil)
 	}
 	if loc < 0 || loc >= len(mem) {
@@ -62,9 +62,9 @@ func setRegister(a Argument, r0 *int, r1 *int, r2 *int, val int) {
 		*r1 = val
 	} else if a == R2 {
 		*r2 = val
-	} else {
-		//assert(false, "Not a register: "+a.Pretty())
-		return
+	}
+	if DEBUG {
+		assert(false, "Not a register: "+a.Pretty())
 	}
 }
 
@@ -93,11 +93,15 @@ func run(program Program, mem []int, limit int) {
 		case SET:
 			setRegister(ins.Arg1, &r0, &r1, &r2, int(ins.Arg2))
 		case INC:
-			assert(ins.Arg1.isRegister(), "Incorrect register argument: "+ins.Pretty())
+			if DEBUG {
+				assert(ins.Arg1.isRegister(), "Incorrect register argument: "+ins.Pretty())
+			}
 			val := getValue(ins.Arg1, r0, r1, r2, nil)
 			setRegister(ins.Arg1, &r0, &r1, &r2, val+1)
 		case DEC:
-			assert(ins.Arg1.isRegister(), "Incorrect register argument: "+ins.Pretty())
+			if DEBUG {
+				assert(ins.Arg1.isRegister(), "Incorrect register argument: "+ins.Pretty())
+			}
 			val := getValue(ins.Arg1, r0, r1, r2, nil)
 			setRegister(ins.Arg1, &r0, &r1, &r2, val-1)
 		case JUMPLESSTHAN:
@@ -144,11 +148,21 @@ func testProgram(program Program, originalArray []int) (Result, []int) {
 	return Result{program, score}, mem
 }
 
+func testProgramAsync(program Program, originalArray []int, out chan Result) {
+	result, _ := testProgram(program, originalArray)
+	out <- result
+}
+
 func testPrograms(programs []Program, originalArray []int) []Result {
+	resultChannels := []chan Result{}
+	for _, program := range programs {
+		out := make(chan Result, 1)
+		go testProgramAsync(program, originalArray, out)
+		resultChannels = append(resultChannels, out)
+	}
 	results := []Result{}
-	for _, prog := range programs {
-		result, _ := testProgram(prog, originalArray)
-		results = append(results, result)
+	for _, out := range resultChannels {
+		results = append(results, <-out)
 	}
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].Score > results[j].Score
@@ -188,11 +202,8 @@ func evolve(programs []Program, rounds int, print bool) []Program {
 		for i := 0; i < programsToKeep; i++ {
 			newPrograms[i] = results[i].Program
 		}
-		for i := 0; i < numNewPrograms/2; i++ {
+		for i := 0; i < numNewPrograms; i++ {
 			newPrograms[programsToKeep+i] = mutate(newPrograms[rand.Intn(programsToKeep)])
-		}
-		for i := numNewPrograms / 2; i < numNewPrograms; i++ {
-			newPrograms[programsToKeep+i] = randomProgram(len(programs[0]))
 		}
 		copy(programs, newPrograms)
 		if print {

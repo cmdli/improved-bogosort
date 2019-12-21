@@ -9,7 +9,7 @@ import (
 	"strconv"
 )
 
-var INSTRUCTION_SET = []InstructionType{SET, JUMPLESSTHAN, SWAP}
+var INSTRUCTION_SET = []InstructionType{SET, JUMPLESSTHAN, SWAP, INC, DEC, JUMP, JUMPZERO}
 
 type InstructionType int
 
