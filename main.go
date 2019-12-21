@@ -3,7 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"math/rand"
+	"os"
+	"runtime/pprof"
 	"time"
 )
 
@@ -61,7 +64,16 @@ func main() {
 	index := flag.Int("index", -1, "Index into the program list")
 	null := flag.Bool("null", false, "Generate null programs")
 	length := flag.Int("length", PROGRAM_LENGTH, "Program length")
+	flagCpuProfile := flag.String("cpuprofile", "", "CPU Profile File")
 	flag.Parse()
+	if *flagCpuProfile != "" {
+		f, err := os.Create(*flagCpuProfile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
 	if *command == "generate" {
 		assert(*numPrograms >= 0, "Need number of programs, see -h for help")
 		programs := []Program{}
@@ -72,7 +84,6 @@ func main() {
 				programs = append(programs, randomProgram(*length))
 			}
 		}
-		programs[0] = nullProgram(PROGRAM_LENGTH)
 		writePrograms(*programFile, programs)
 	} else if *command == "test" {
 		assert(*programFile != "", "Need program file, see -h for help")

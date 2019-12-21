@@ -37,22 +37,38 @@ func getValue(a Argument, r0 int, r1 int, r2 int, mem []int) int {
 }
 
 func getMemValue(a Argument, r0 int, r1 int, r2 int, mem []int) int {
-	loc := int(a)
-	if a == R0 || a == R1 || a == R2 {
-		loc = getValue(a, r0, r1, r2, nil)
+	if a == R0 {
+		if r0 >= 0 && r0 < len(mem) {
+			return mem[r0]
+		}
+	} else if a == R1 {
+		if r1 >= 0 && r1 < len(mem) {
+			return mem[r1]
+		}
+	} else if a == R2 {
+		if r2 >= 0 && r2 < len(mem) {
+			return mem[r2]
+		}
+	} else {
+		loc := int(a)
+		if loc >= 0 && loc < len(mem) {
+			return mem[int(a)]
+		}
 	}
-	if loc < 0 || loc >= len(mem) {
-		return 0
-	}
-	return mem[loc]
+	return 0
 }
 
 // Returns 'a' as intepreted as a memory location
 func getMemLocation(a Argument, r0 int, r1 int, r2 int) int {
-	if a.isRegister() {
-		return getValue(a, r0, r1, r2, nil)
+	if a == R0 {
+		return r0
+	} else if a == R1 {
+		return r1
+	} else if a == R2 {
+		return r2
+	} else {
+		return int(a)
 	}
-	return int(a)
 }
 
 func setRegister(a Argument, r0 *int, r1 *int, r2 *int, val int) {
@@ -81,10 +97,7 @@ func run(program Program, mem []int, limit int) {
 	r0, r1, r2 := 0, 0, 0
 	pc := 0
 	iterations := 0
-	for {
-		if pc >= len(program) || pc < 0 || iterations >= limit {
-			break
-		}
+	for pc < len(program) && pc >= 0 && iterations < limit {
 		ins := program[pc]
 		switch ins.Type {
 		case READ:
