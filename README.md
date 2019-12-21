@@ -6,9 +6,9 @@ algorithms better than we can, so I decided to have them sort numbers for me.
 
 Usage
 =======
-go run *.go -cmd=generate -programs=<program_file> -num_programs=100
-go run *.go -cmd=evolve -programs=<program_file> -iterations=100
-go run *.go -cmd=test -programs=<program_file>
+* go run *.go -cmd=generate -programs=<program_file> -num_programs=100
+* go run *.go -cmd=evolve -programs=<program_file> -iterations=100
+* go run *.go -cmd=test -programs=<program_file>
 
 TODO
 =======
